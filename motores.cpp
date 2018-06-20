@@ -6,21 +6,25 @@ tipoMovimiento anterior = ini;
 void derecha_adelante(){ //Entradas 01 hacia delante
   digitalWrite(DER1, LOW);
   digitalWrite(DER2, HIGH);
+  delay(10);
 }
 
 void izquierda_adelante(){
   digitalWrite(IZQ1, LOW);
   digitalWrite(IZQ2, HIGH);
+  delay(10);
 }
 
 void derecha_atras(){ //Entradas 10 hacia atras
   digitalWrite(DER1, HIGH);
   digitalWrite(DER2, LOW);
+  delay(10);
 }
 
 void izquierda_atras(){
   digitalWrite(IZQ1, HIGH);
   digitalWrite(IZQ2, LOW);
+  delay(10);
 }
 
 void parar(){
@@ -28,6 +32,7 @@ void parar(){
   digitalWrite(IZQ2, LOW);  
   digitalWrite(DER1, LOW);
   digitalWrite(DER2, LOW);
+  delay(10);
 }
 
 void girarDerecha(){

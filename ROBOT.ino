@@ -16,6 +16,9 @@
 #define distancia_localizado 40 //distancia en cm apartir de la cual consideramos que hemos localizado el objetivo
 #define distancia_ataque 20 //distancia en cm apartir de la cual embestimos
 #define distancia_minima 4 //distancia minimo, a partir de este valor descartamos mediciones
+#define PISADO_DELANTE 0
+#define PISADO_DETRAS 1
+#define PISADAS_NINGUNA 2
 
 
 enum State{
@@ -32,15 +35,12 @@ enum State{
 };
 
 
-//VARIABLES DEL SISTEMA
-//enum mov {DEL, ATR, IZQ, DER, STOP};
-//volatile mov movActual;
+//VARIABLES GLOBALES DEL SISTEMA
 byte velocidad;
 byte contador = 0;
 volatile byte duracion;
 volatile bool duracionFijada = false;//flag para indicar que la variable duracion ha sido fijada
 volatile unsigned long ini_Fre, ini_Der, ini_Izq, end_Fre, end_Der, end_Izq;
-volatile bool lineaDelante, lineaDetras;
 volatile bool medido_Der, medido_Fre, medido_Izq;
 State estadoActual;
 
@@ -64,6 +64,45 @@ unsigned int getRange(unsigned long inicio, unsigned long fin) {
   return (fin - inicio) / 58; //comprobar 148
 }
 
+
+byte AlgoPisado(){ 
+  auto delante = digitalRead(INFRADELANTE);
+  auto detras = digitalRead(INFRADETRAS);
+  byte pisado;
+
+
+  if (delante == LOW && detras == LOW)
+    pisado = PISADAS_NINGUNA;
+  else if (delante == HIGH)
+    pisado = PISADO_DELANTE;
+  else
+    pisado = PISADO_DETRAS;
+
+
+  return pisado;
+}
+
+bool ComprobarLineas(State &estado){
+  bool algoPisado;
+
+  
+  switch (AlgoPisado()){
+    case  PISADAS_NINGUNA:
+      algoPisado = false;
+      break;
+    case PISADO_DELANTE:
+      estado = HuirLineaDelante;
+      algoPisado = true;
+      break;
+    case PISADO_DETRAS:
+      estado = HuirLineaDetras;
+      algoPisado = true;
+      break;
+  }
+
+
+  return algoPisado;
+}
 
 
 void setup() {
@@ -95,11 +134,12 @@ void setup() {
   TIMSK2 |= (1 << OCIE2A);
  
   Serial.begin(9600);
-  while (!Serial) continue;
   pinMode(sFRENTE, INPUT);
   pinMode(sDERECH, INPUT);
   pinMode(sIZQUIE, INPUT);
   pinMode(TRIGGER, OUTPUT);
+  pinMode(INFRADELANTE, INPUT);
+  pinMode(INFRADETRAS, INPUT);
   digitalWrite(TRIGGER, LOW);
 
 
@@ -109,14 +149,13 @@ void setup() {
   attachInterrupt( digitalPinToInterrupt(sFRENTE), ISR_sFRENTE, CHANGE);
   attachInterrupt( digitalPinToInterrupt(sDERECH), ISR_sDERECH, CHANGE);
   attachInterrupt( digitalPinToInterrupt(sIZQUIE), ISR_sIZQUIE, CHANGE);
-
-  //Interrupciones para detectar lineas negras
-  attachInterrupt(digitalPinToInterrupt(INFRADELANTE), ISR_LineaDelante, FALLING); 
-  attachInterrupt(digitalPinToInterrupt(INFRADETRAS), ISR_LineaDetras, FALLING);
   sei(); //habilitamos interrupciones.
-  
+
+
   estadoActual = Inicial;
 }
+
+
 
 void loop() {
   //VARIABLES LOCALES
@@ -125,6 +164,8 @@ void loop() {
   unsigned int Izq;
   byte Velocidad = LENTO;
   bool medicionIniciada = false; //flag que indica si una medicion ha sido solicitada
+
+
 
   while(true){
       switch(estadoActual){
@@ -140,21 +181,22 @@ void loop() {
           }
 
           if (medido_Fre && medido_Der && medido_Izq){
+            medicionIniciada = false;
+            
             Front = getRange(ini_Fre, end_Fre);
             Der = getRange(ini_Der, end_Der);
             Izq = getRange(ini_Izq, end_Izq);
 
-            /*Serial.print("Medida sFRENTE cm:");
-            Serial.println(getRange(ini_Fre, end_Fre));
-            Serial.print("Medida sDERECH cm:");
-            Serial.println(getRange(ini_Der, end_Der));
-            Serial.print("Medida sIZQUIE cm:");
-            Serial.println(getRange(ini_Izq, end_Izq));*/
-
-
+            //Serial.print("Medida sFRENTE cm:");
+            //Serial.println(getRange(ini_Fre, end_Fre));
+            //Serial.print("Medida sDERECH cm:");
+            //Serial.println(getRange(ini_Der, end_Der));
+            //Serial.print("Medida sIZQUIE cm:");
+            //Serial.println(getRange(ini_Izq, end_Izq));
+          
             duracionFijada = false;
 
-
+            
             if (Der > distancia_minima && Der < Front && Der < distancia_localizado){
               duracion = 26; //Giramos durante   0.494 segundos
               Velocidad = MEDIO;
@@ -172,28 +214,43 @@ void loop() {
                Velocidad = RAPIDO;
                estadoActual = Avanzando;
             }else {
-                duracion = 18; // Avanzamosjusto el tiempo entre medicion y medicion
+                duracion = 30; // Avanzamosjusto el tiempo entre medicion y medicion
                 Velocidad = LENTO;
                 estadoActual = Avanzando;
             }            
 
+            //Serial.println("Aqui1");
             delay(3000);
+            //Serial.println("Aqui2");
           }
+
+           /*Serial.println("iter1");
+           
+           if (digitalRead(INFRADELANTE) == HIGH){
+              Serial.println("DELANTE: HIGH"); 
+           }else if (digitalRead(INFRADELANTE) == LOW){
+               Serial.println("DELANTE: LOW");
+           }
+
+           if (digitalRead(INFRADETRAS) == HIGH){
+              Serial.println("DETRAS: HIGH"); 
+           }else if (digitalRead(INFRADETRAS) == LOW){
+               Serial.println("DETRAS: LOW");
+           }
+
+           
+
+           delay(500);*/
           break;
         
         
         
         case BuscandoEnemigo:
-         //Serial.println("Buscando enemigo");
-
-         if (lineaDelante){
-             estadoActual = HuirLineaDelante;
-             duracionFijada = false;
-
-         }else if (lineaDetras){
-             estadoActual = HuirLineaDetras;
-             duracionFijada = false;
-         }else{
+          //Serial.println("Buscando Enemigo");
+          if (ComprobarLineas(estadoActual)){
+            duracionFijada = false;
+           
+          }else{
             if (!medicionIniciada){
               StartMeasure();
               medicionIniciada = true;
@@ -211,18 +268,16 @@ void loop() {
               Serial.print("Medida sDERECH cm:");
               Serial.println(getRange(ini_Der, end_Der));
               Serial.print("Medida sIZQUIE cm:");
-              Serial.println(getRange(ini_Izq, end_Izq));*/
-
-              
-              duracionFijada = false;
-
+              Serial.println(getRange(ini_Izq, end_Izq));
+              */
+              duracionFijada = false; 
               
               if (Der > distancia_minima && Der < Front && Der < distancia_localizado){
-                duracion = 26; //Giramos durante   0.494 segundos
+                duracion = 30; //Giramos durante   0.494 segundos
                 Velocidad = MEDIO;
                 estadoActual = GirandoDerecha;
               }else if (Izq > distancia_minima && Izq < Front && Izq < distancia_localizado){
-                duracion = 26; //Giramos durante 0.494 segundos
+                duracion = 30; //Giramos durante 0.494 segundos
                 Velocidad = MEDIO;
                 estadoActual = GirandoIzquierda;
               }else if (Front < distancia_localizado && Front > distancia_ataque){
@@ -234,7 +289,7 @@ void loop() {
                  Velocidad = RAPIDO;
                  estadoActual = Avanzando;
               }else {
-                  duracion = 18; // Avanzamosjusto el tiempo entre medicion y medicion
+                  duracion = 30; // Avanzamosjusto el tiempo entre medicion y medicion
                   Velocidad = LENTO;
                   estadoActual = Avanzando;
               }
@@ -248,14 +303,9 @@ void loop() {
         case Avanzando:
         //Serial.print("Avanzando: "); Serial.println(duracion);
 
-          if (lineaDelante){
-               estadoActual = HuirLineaDelante;
-               duracionFijada = false;
-  
-           }else if (lineaDetras){
-               estadoActual = HuirLineaDetras;
-               duracionFijada = false;
-           }else{
+         if (ComprobarLineas(estadoActual)){
+            duracionFijada = false;
+         }else{
             if (!duracionFijada){
               duracionFijada = true;
               analogWrite(PWM, Velocidad);
@@ -275,14 +325,9 @@ void loop() {
 
         case GirandoDerecha:
         //Serial.println("Girando Derecha");
-          if (lineaDelante){
-               estadoActual = HuirLineaDelante;
-               duracionFijada = false;
-  
-           }else if (lineaDetras){
-               estadoActual = HuirLineaDetras;
-               duracionFijada = false;
-           }else{
+           if (ComprobarLineas(estadoActual)){
+            duracionFijada = false;
+            }else{
               if (!duracionFijada){
                   duracionFijada = true;
                   analogWrite(PWM, Velocidad);
@@ -302,14 +347,8 @@ void loop() {
         
         case GirandoIzquierda:
         //Serial.println("Girando Izquierda");
-        
-           if (lineaDelante){
-               estadoActual = HuirLineaDelante;
-               duracionFijada = false;
-  
-           }else if (lineaDetras){
-               estadoActual = HuirLineaDetras;
-               duracionFijada = false;
+           if (ComprobarLineas(estadoActual)){
+            duracionFijada = false;
            }else{
               if (!duracionFijada){
                   duracionFijada = true;
@@ -328,36 +367,28 @@ void loop() {
 
 
           case HuirLineaDelante:
-            //Serial.println("HuirDelante");
-            /*duracionFijada = false;
+           //Serial.println("HuirDelante");
+            duracionFijada = false;
             duracion = 79; //Avanzamos durante 1.501 seg
             Velocidad = RAPIDO;
-            estadoActual = HuyendoMarchaDetras;*/
-
-            estadoActual = BuscandoEnemigo;
-            lineaDelante =false;
+            estadoActual = HuyendoMarchaDetras;
           break;
 
           
           
           case HuirLineaDetras:
-            /*//Serial.println("HuirDelante");
+            //Serial.println("HuirDelante");
             duracionFijada = false;
             duracion = 79; //Avanzamos durante 1.501 seg
             Velocidad = RAPIDO;
-            estadoActual = HuyendoMarchaDelate;*/
+            estadoActual = HuyendoMarchaDelate;
 
-            estadoActual = BuscandoEnemigo;
-            lineaDetras =false;
           break;
 
           
           
           case HuyendoMarchaDetras:
-            if (lineaDetras){
-              lineaDelante = false;
-              estadoActual = HuirLineaDetras;
-            }else{
+           //Serial.println("HuirMarchaDetras");
               if (!duracionFijada){
                 duracionFijada = true;
                 analogWrite(PWM, Velocidad);
@@ -370,16 +401,12 @@ void loop() {
                 Velocidad = RAPIDO;
                 estadoActual = HuyendoGirarDerecha;
               }
-            }
           break;
           
           
           
           case HuyendoMarchaDelate:
-            if (lineaDelante){
-              lineaDetras = false;
-              estadoActual = HuirLineaDelante;
-            }else {
+           //Serial.println("HuirMarchaDelante");
                 if (!duracionFijada){
                   duracionFijada = true;
                   analogWrite(PWM, Velocidad);
@@ -392,7 +419,6 @@ void loop() {
                   Velocidad = RAPIDO;
                   estadoActual = HuyendoGirarDerecha; 
                 }
-            }
           break;
 
           
@@ -405,13 +431,6 @@ void loop() {
 
             if (duracion == 1){
                 duracionFijada = false;
-                if (lineaDelante){
-                  lineaDelante = false;
-                }
-
-                if (lineaDetras){
-                  lineaDetras = false;  
-                }
 
                 analogWrite(PWM, LENTO);
                 estadoActual = BuscandoEnemigo;
@@ -475,20 +494,6 @@ void ISR_sDERECH() {
       medido_Der = true;
       break;
   }
-}
-
-
-
-
-void ISR_LineaDelante(){
-  lineaDelante = true;
-  duracionFijada = false;
-}
-
-
-void ISR_LineaDetras(){
-  lineaDetras = true;
-  duracionFijada = false;  
 }
 
 
