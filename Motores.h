@@ -8,9 +8,9 @@
 #define DER2 39
 
 
-#define LENTO 50
-#define MEDIO 70
-#define RAPIDO 100
+#define LENTO 60
+#define MEDIO 100
+#define RAPIDO 255
 
 
 #include "Arduino.h"
